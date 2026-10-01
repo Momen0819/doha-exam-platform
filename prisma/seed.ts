@@ -1,18 +1,25 @@
 import { PrismaClient, QuestionType, LinkStatus } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding database for Doha Mostafa Exam Platform...');
 
+  const passwordHash = await bcrypt.hash('P123456', 10);
+
   // 1. Create Teacher
   const teacher = await prisma.teacher.upsert({
-    where: { email: 'doha.mostafa@arabic-exams.com' },
-    update: {},
+    where: { email: 'doha@dohamostafa.com' },
+    update: {
+      username: 'doha',
+      passwordHash: passwordHash,
+    },
     create: {
       name: 'أ/ ضحى مصطفى',
-      email: 'doha.mostafa@arabic-exams.com',
-      passwordHash: 'argon2_mock_teacher_hash',
+      username: 'doha',
+      email: 'doha@dohamostafa.com',
+      passwordHash: passwordHash,
     },
   });
 

@@ -28,6 +28,7 @@ enum LinkStatus {
 model Teacher {
   id           String     @id @default(cuid())
   name         String     @default("أ/ ضحى مصطفى")
+  username     String?    @unique
   email        String     @unique
   passwordHash String
   students     Student[]

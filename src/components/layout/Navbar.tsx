@@ -54,6 +54,12 @@ export default function Navbar() {
           {/* Teacher Portal CTA */}
           <div className="hidden md:flex items-center gap-3">
             <Link
+              href="/login"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50/70 rounded-xl transition-colors"
+            >
+              <span>تسجيل الدخول</span>
+            </Link>
+            <Link
               href="/dashboard"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 font-medium text-sm shadow-sm transition-all hover:shadow-md active:scale-98"
             >
@@ -100,7 +106,14 @@ export default function Navbar() {
           >
             دخول الامتحان برمز الوصول
           </Link>
-          <div className="pt-3">
+          <div className="pt-3 space-y-2">
+            <Link
+              href="/login"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-emerald-50 text-emerald-800 font-bold text-base border border-emerald-200"
+            >
+              <span>تسجيل الدخول للمعلمة</span>
+            </Link>
             <Link
               href="/dashboard"
               onClick={() => setMobileMenuOpen(false)}
