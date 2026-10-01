@@ -1,0 +1,147 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum QuestionType {
+  MCQ             // اختر من متعدد
+  BETWEEN_PARENS  // ما بين القوسين
+  FILL_IN_BLANK   // أكمل الفراغات
+  IRAB            // أعرب ما تحته خط
+  DICTATION       // إملاء صوتي
+  ESSAY           // تعبير
+  SHORT_ANSWER    // سؤال وجواب مقالي قصير
+}
+
+enum LinkStatus {
+  PENDING         // تم توليد الرابط ولم يبدأ بعد
+  IN_PROGRESS     // الطالب بدأ الامتحان حالياً
+  SUBMITTED       // تم تسليم الإجابات بنجاح
+  GRADED          // تم تصحيح الامتحان واعتماد الدرجة
+  EXPIRED         // انتهت صلاحية الرابط أو وقت الامتحان
+}
+
+model Teacher {
+  id           String     @id @default(cuid())
+  name         String     @default("أ/ ضحى مصطفى")
+  email        String     @unique
+  passwordHash String
+  students     Student[]
+  exams        Exam[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Student {
+  id           String           @id @default(cuid())
+  teacherId    String
+  teacher      Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  name         String           // اسم الطالب ثلاثي
+  grade        String           // الصف الدراسي (مثلاً: الصف الرابع الابتدائي)
+  parentPhone  String?          // رقم واتساب ولي الأمر
+  examLinks    ExamLink[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([teacherId])
+}
+
+model Exam {
+  id             String         @id @default(cuid())
+  teacherId      String
+  teacher        Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  title          String         // عنوان الامتحان (مثلاً: امتحان لغة عربية - شهر أكتوبر)
+  grade          String         // المرحلة / الصف الدراسي
+  durationMins   Int            // مدة الامتحان بالدقائق (مثلاً: 30 دقيقة)
+  instructions   String?        // تعليمات تظهر للطالب قبل البدء
+  totalMarks     Float          @default(0) // إجمالي درجات الامتحان
+  isArchived     Boolean        @default(false)
+  questions      Question[]
+  links          ExamLink[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([teacherId])
+}
+
+model Question {
+  id              String          @id @default(cuid())
+  examId          String
+  exam            Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  orderIndex      Int             // ترتيب السؤال في الامتحان
+  type            QuestionType    // نوع السؤال
+  promptText      String          // نص السؤال أو القطعة النحوية/الإملائية
+  hint            String?         // تلميح اختياري
+  marks           Float           // درجة السؤال
+  optionsJson     Json?           // خيارات الاختياري أو ما بين القوسين ["خيار 1", "خيار 2", ...]
+  correctAnswer   String?         // الإجابة الصحيحة للأسئلة الموضوعية
+  audioUrl        String?         // رابط التسجيل الصوتي للإملاء
+  maxAudioPlays   Int             @default(3) // الحد الأقصى لسماع التسجيل
+  images          QuestionImage[]
+  answers         Answer[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([examId, orderIndex])
+}
+
+model QuestionImage {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  imageUrl   String   // مسار الصورة
+  caption    String?  // وصف الصورة
+  createdAt  DateTime @default(now())
+}
+
+model ExamLink {
+  id                String          @id @default(cuid())
+  accessCode        String          @unique // كود فريد في الـ URL
+  examId            String
+  exam              Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status            LinkStatus      @default(PENDING)
+  deviceFingerprint String?         // بصمة جهاز الطالب المسجلة عند أول فتح
+  startedAt         DateTime?       // وقت فتح وبدء الامتحان الفعلي
+  expiresAt         DateTime?       // startedAt + durationMins (سيرفر أوتوماتيكي)
+  submittedAt       DateTime?       // وقت تسليم الإجابة
+  attempt           StudentAttempt?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([accessCode])
+  @@index([examId, studentId])
+}
+
+model StudentAttempt {
+  id                  String       @id @default(cuid())
+  examLinkId          String       @unique
+  examLink            ExamLink     @relation(fields: [examLinkId], references: [id], onDelete: Cascade)
+  totalScore          Float?       // الدرجة المحسوبة بعد التصحيح
+  teacherFeedback     String?      // ملاحظات المعلمة للطالب
+  isFeedbackPublished Boolean      @default(false) // إتاحة النتيجة للطالب وولي الأمر
+  answers             Answer[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model Answer {
+  id            String         @id @default(cuid())
+  attemptId     String
+  attempt       StudentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  studentAnswer String         // الإجابة المكتوبة أو المختارة من الطالب
+  scoreAwarded  Float?         // الدرجة الممنوحة بعد التصحيح
+  teacherNote   String?        // تصويب وتوجيه المعلمة لهذا السؤال بالتحديد
+  isAutoGraded  Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([attemptId, questionId])
+}
