@@ -28,6 +28,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { title, grade, durationMins, instructions, questions } = body;
 
+    if (!title || !String(title).trim()) {
+      return NextResponse.json({ success: false, error: 'عنوان الاختبار مطلوب' }, { status: 400 });
+    }
+
     // Get default teacher
     const teacher = await prisma.teacher.findFirst();
     if (!teacher) {

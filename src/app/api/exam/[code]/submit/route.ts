@@ -146,7 +146,9 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: 'تم تسليم الامتحان بنجاح!',
+      attemptId: attempt.id,
       status: finalStatus,
+      score: calculatedScore,
       totalScore: calculatedScore,
       totalMarks: examLink.exam.totalMarks,
       hasSubjectiveQuestions,

@@ -60,13 +60,10 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'محاولة الطالب غير موجودة' }, { status: 404 });
     }
 
-    let calculatedTotal = 0;
-
     // Update each answer score & teacher note
     if (questionScores && typeof questionScores === 'object') {
       for (const [qId, data] of Object.entries(questionScores as Record<string, { score: number; note?: string }>)) {
         const score = Number(data.score) || 0;
-        calculatedTotal += score;
 
         await prisma.answer.upsert({
           where: {
@@ -90,6 +87,12 @@ export async function POST(
       }
     }
 
+    // Calculate total score from ALL answers
+    const allAnswers = await prisma.answer.findMany({
+      where: { attemptId },
+    });
+    const calculatedTotal = allAnswers.reduce((sum, ans) => sum + (ans.scoreAwarded || 0), 0);
+
     // Update studentAttempt
     const updatedAttempt = await prisma.studentAttempt.update({
       where: { id: attemptId },
@@ -112,6 +115,7 @@ export async function POST(
       success: true,
       message: 'تم حفظ واعتماد التقييم بنجاح!',
       attempt: updatedAttempt,
+      totalScore: calculatedTotal,
     });
   } catch (error) {
     console.error('Error grading attempt:', error);

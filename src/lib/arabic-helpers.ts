@@ -68,9 +68,10 @@ export function compareAnswers(
     return { isMatch: true, accuracyPercent: 100 };
   }
 
-  // If exact tashkeel is required and didn't match
+  // If exact tashkeel is required
   if (requireExactTashkeel) {
-    return { isMatch: false, accuracyPercent: 60 };
+    const similarity = calculateLevenshteinSimilarity(cleanStudent, cleanCorrect);
+    return { isMatch: similarity >= 90, accuracyPercent: Math.round(similarity) };
   }
 
   // 2. Normalized comparison without Tashkeel
