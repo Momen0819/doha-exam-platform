@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { success: false, error: 'حدث خطأ في الخادم أثناء تسجيل الدخول' },
+      { success: false, error: 'حدث خطأ في الخادم أثناء تسجيل الدخول: ' + String(error) },
       { status: 500 }
     );
   }
