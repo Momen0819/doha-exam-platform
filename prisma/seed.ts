@@ -6,6 +6,14 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding database for Doha Mostafa Exam Platform...');
 
+  await prisma.answer.deleteMany();
+  await prisma.studentAttempt.deleteMany();
+  await prisma.examLink.deleteMany();
+  await prisma.questionImage.deleteMany();
+  await prisma.question.deleteMany();
+  await prisma.exam.deleteMany();
+  await prisma.student.deleteMany();
+
   const passwordHash = await bcrypt.hash('P123456', 10);
 
   // 1. Create Teacher
