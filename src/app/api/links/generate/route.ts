@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { LinkStatus } from '@prisma/client';
+import { getAuthenticatedTeacher } from '@/lib/auth';
 
 function generateShortCode(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -11,8 +12,13 @@ function generateShortCode(): string {
   return code;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { examId, studentIds } = body;
 

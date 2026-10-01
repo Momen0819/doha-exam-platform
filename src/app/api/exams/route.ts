@@ -1,10 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { QuestionType } from '@prisma/client';
+import { getAuthenticatedTeacher } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const exams = await prisma.exam.findMany({
+      where: { teacherId: teacher.id },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -16,26 +23,25 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ success: true, exams });
+    return NextResponse.json({ success: true, exams, data: exams });
   } catch (error) {
     console.error('Error fetching exams:', error);
     return NextResponse.json({ success: false, error: 'حدث خطأ أثناء جلب الامتحانات' }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { title, grade, durationMins, instructions, questions } = body;
+    const { title, grade, gradeLevel, durationMins, instructions, description, questions } = body;
 
     if (!title || !String(title).trim()) {
       return NextResponse.json({ success: false, error: 'عنوان الاختبار مطلوب' }, { status: 400 });
-    }
-
-    // Get default teacher
-    const teacher = await prisma.teacher.findFirst();
-    if (!teacher) {
-      return NextResponse.json({ success: false, error: 'لم يتم العثور على حساب المعلمة' }, { status: 400 });
     }
 
     const calculatedTotalMarks = Array.isArray(questions)
@@ -45,10 +51,10 @@ export async function POST(req: Request) {
     const newExam = await prisma.exam.create({
       data: {
         teacherId: teacher.id,
-        title,
-        grade,
+        title: title.trim(),
+        grade: (grade || gradeLevel || 'الصف الرابع الابتدائي').trim(),
         durationMins: Number(durationMins) || 30,
-        instructions: instructions || 'أجب عن جميع الأسئلة التالية بتركيز وعناية.',
+        instructions: instructions || description || 'أجب عن جميع الأسئلة التالية بتركيز وعناية.',
         totalMarks: calculatedTotalMarks,
         questions: {
           create: (questions || []).map((q: any, idx: number) => ({
@@ -69,7 +75,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, exam: newExam }, { status: 201 });
+    return NextResponse.json({ success: true, exam: newExam, data: newExam }, { status: 201 });
   } catch (error) {
     console.error('Error creating exam:', error);
     return NextResponse.json({ success: false, error: 'فشل إنشاء الامتحان' }, { status: 500 });

@@ -25,7 +25,7 @@ export default function ExamsManagementPage() {
       const res = await fetch('/api/exams');
       const data = await res.json();
       if (data.success) {
-        setExams(data.data);
+        setExams(data.exams || data.data || []);
       }
       setLoading(false);
     } catch (e) {

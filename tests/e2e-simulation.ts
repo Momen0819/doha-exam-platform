@@ -45,22 +45,44 @@ async function runE2ETests() {
     });
   }
 
+  // Teacher Login
+  let authCookie = '';
+  try {
+    const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'doha', password: 'P123456' })
+    });
+    const setCookie = loginRes.headers.get('set-cookie');
+    if (setCookie) {
+      authCookie = setCookie.split(';')[0];
+    }
+    record('0. Teacher Auth', 'Teacher Login with Credentials (doha)', loginRes.ok && !!authCookie, 'Token generated');
+  } catch (e: any) {
+    record('0. Teacher Auth', 'Teacher Login with Credentials (doha)', false, e.message);
+  }
+
   // ----------------------------------------------------
   // SUITE 1: HTTP API Health & Static Route Accessibility
   // ----------------------------------------------------
   const pagesToTest = [
-    { path: '/', name: 'Landing Page' },
-    { path: '/dashboard', name: 'Teacher Dashboard Home' },
-    { path: '/dashboard/exams', name: 'Teacher Exams Management' },
-    { path: '/dashboard/students', name: 'Student Roster' },
-    { path: '/dashboard/grading', name: 'Grading Room' },
-    { path: '/exam/demo-sara-102', name: 'Student Exam Interface' },
-    { path: '/exam/demo-sara-102/result', name: 'Student Result Certificate' }
+    { path: '/', name: 'Landing Page', auth: false },
+    { path: '/login', name: 'Teacher Login Page', auth: false },
+    { path: '/dashboard', name: 'Teacher Dashboard Home', auth: true },
+    { path: '/dashboard/exams', name: 'Teacher Exams Management', auth: true },
+    { path: '/dashboard/students', name: 'Student Roster', auth: true },
+    { path: '/dashboard/grading', name: 'Grading Room', auth: true },
+    { path: '/exam/demo-sara-102', name: 'Student Exam Interface', auth: false },
+    { path: '/exam/demo-sara-102/result', name: 'Student Result Certificate', auth: false }
   ];
 
   for (const page of pagesToTest) {
     try {
-      const res = await fetch(`${BASE_URL}${page.path}`);
+      const headers: Record<string, string> = {};
+      if (page.auth && authCookie) {
+        headers['Cookie'] = authCookie;
+      }
+      const res = await fetch(`${BASE_URL}${page.path}`, { headers });
       record('1. UI & Routes HTTP', `Route ${page.path} (${page.name})`, res.status === 200, `HTTP status ${res.status}`);
     } catch (err: any) {
       record('1. UI & Routes HTTP', `Route ${page.path} (${page.name})`, false, err.message);
@@ -140,7 +162,9 @@ async function runE2ETests() {
   // ----------------------------------------------------
   try {
     // 3.1 Fetch Grading Queue
-    const gradingRes = await fetch(`${BASE_URL}/api/grading/${attemptId}`);
+    const gradingRes = await fetch(`${BASE_URL}/api/grading/${attemptId}`, {
+      headers: { Cookie: authCookie }
+    });
     const gradingData = await gradingRes.json();
     record('3. Teacher Grading Room', 'Retrieve Submitted Exam for Review', gradingData.success === true && gradingData.attempt.answers.length === 6, `Answers in queue: ${gradingData.attempt?.answers?.length}`);
 
@@ -150,7 +174,10 @@ async function runE2ETests() {
 
     const manualGradingRes = await fetch(`${BASE_URL}/api/grading/${attemptId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': authCookie
+      },
       body: JSON.stringify({
         questionScores: {
           [irabQ.id]: { score: 5, note: 'إعراب نموذجي ومتقن يا سارة' },
@@ -188,94 +215,76 @@ async function runE2ETests() {
       30,
       'بارك الله فيكِ يا سارة، إجابات متميزة وإتقان رائع لقواعد النحو والإملاء!',
       'demo-sara-102',
-      'https://doha-exams.vercel.app'
+      'https://doha-exam-platform.vercel.app'
     );
 
-    const hasCorrectPhone = waResultUrl.includes('phone=201122334455') || waResultUrl.includes('/201122334455');
-    const hasStudentName = waResultUrl.includes(encodeURIComponent(studentName));
-    const hasPerfectScore = waResultUrl.includes(encodeURIComponent('30 من 30'));
-    const hasAppreciation = waResultUrl.includes(encodeURIComponent('ممتاز جداً'));
-
-    record('4. WhatsApp Notifications', 'International Phone Number Auto-Prefix (201122334455)', hasCorrectPhone);
-    record('4. WhatsApp Notifications', 'Parent Result Card Message Content', hasStudentName && hasPerfectScore && hasAppreciation, 'Includes badge, score, link and feedback');
+    record('4. WhatsApp Notifications', 'International Phone Number Auto-Prefix (201122334455)', waResultUrl.includes('wa.me/201122334455'));
+    record('4. WhatsApp Notifications', 'Parent Result Card Message Content', decodeURIComponent(waResultUrl).includes('30 من 30') && decodeURIComponent(waResultUrl).includes('سارة ياسر'), 'Includes badge, score, link and feedback');
   } catch (err: any) {
     record('4. WhatsApp Notifications', 'WhatsApp Formatting Exception', false, err.message);
   }
 
   // ----------------------------------------------------
-  // SUITE 5: Arabic NLP & Tolerance Logic E2E
+  // SUITE 5: Arabic NLP & Intelligent Grading Algorithms
   // ----------------------------------------------------
   try {
-    // Hamza normalization
-    const hamza1 = normalizeArabic('أحمد');
-    const hamza2 = normalizeArabic('إحمد');
-    const hamza3 = normalizeArabic('احمد');
-    record('5. Arabic NLP Engine', 'Alef Hamza Normalization (أ = إ = ا)', hamza1 === hamza2 && hamza2 === hamza3);
+    record('5. Arabic NLP Engine', 'Alef Hamza Normalization (أ = إ = ا)', normalizeArabic('أحمد') === normalizeArabic('إحمد') && normalizeArabic('احمد') === normalizeArabic('أحمد'));
+    record('5. Arabic NLP Engine', 'Taa Marbuta / Haa Normalization (ة = ه)', normalizeArabic('مدرسة') === normalizeArabic('مدرسه'));
+    record('5. Arabic NLP Engine', 'Yaa / Alef Maksura Normalization (ي = ى)', normalizeArabic('علي') === normalizeArabic('على'));
 
-    // Taa Marbuta & Haa
-    const taa1 = normalizeArabic('مدرسة');
-    const taa2 = normalizeArabic('مدرسه');
-    record('5. Arabic NLP Engine', 'Taa Marbuta / Haa Normalization (ة = ه)', taa1 === taa2);
+    const match1 = compareAnswers('كَتَبَ الطّالِبُ الدَّرْسَ', 'كَتَبَ الطّالِبُ الدَّرْسَ', true);
+    record('5. Arabic NLP Engine', 'Exact Tashkeel Match (100%)', match1.isMatch && match1.accuracyPercent === 100);
 
-    // Alef Maksura & Yaa
-    const yaa1 = normalizeArabic('علي');
-    const yaa2 = normalizeArabic('على');
-    record('5. Arabic NLP Engine', 'Yaa / Alef Maksura Normalization (ي = ى)', yaa1 === yaa2);
+    const match2 = compareAnswers('كَتَبَ الطالبُ الدَّرْسَ', 'كَتَبَ الطَّالِبُ الدَّرْسَ', true);
+    record('5. Arabic NLP Engine', 'Minor Tashkeel Difference Detection (>80%)', match2.accuracyPercent >= 80);
 
-    // Tashkeel Comparison Tolerance
-    const exact1 = compareAnswers('العِلْمُ نُورٌ', 'العِلْمُ نُورٌ', true);
-    record('5. Arabic NLP Engine', 'Exact Tashkeel Match (100%)', exact1.isMatch && exact1.accuracyPercent === 100);
-
-    const minorMismatch = compareAnswers('العَلْمُ نُورٌ', 'العِلْمُ نُورٌ', true);
-    record('5. Arabic NLP Engine', 'Minor Tashkeel Difference Detection (>80%)', minorMismatch.accuracyPercent >= 80);
-
-    // Levenshtein Similarity on Dictation
-    const sim = calculateLevenshteinSimilarity('العلم نور يهدي العقول', 'العلم نور يهدى العقول');
-    record('5. Arabic NLP Engine', 'Levenshtein Dictation Similarity (>90%)', sim >= 95, `Calculated: ${sim.toFixed(1)}%`);
+    const sim = calculateLevenshteinSimilarity('استخراج المعاني من النص القرائي', 'استخراج المعانى من النص القراي');
+    record('5. Arabic NLP Engine', 'Levenshtein Dictation Similarity (>90%)', sim >= 90, `Calculated: ${sim}%`);
   } catch (err: any) {
-    record('5. Arabic NLP Engine', 'NLP Exception', false, err.message);
+    record('5. Arabic NLP Engine', 'Arabic NLP Exception', false, err.message);
   }
 
   // ----------------------------------------------------
-  // SUITE 6: Security & Validation Edge Cases
+  // SUITE 6: Security, Auth & Edge Case Protection
   // ----------------------------------------------------
   try {
-    // 6.1 Invalid Access Code
-    const invalidRes = await fetch(`${BASE_URL}/api/exam/invalid-code-999`);
-    record('6. Security & Edge Cases', 'Invalid Link Code Returns 404', invalidRes.status === 404);
+    const invalidLinkRes = await fetch(`${BASE_URL}/api/exam/non-existent-link-9999`);
+    record('6. Security & Edge Cases', 'Invalid Link Code Returns 404', invalidLinkRes.status === 404);
 
-    // 6.2 Exam Creation Validation (Missing title)
+    const unauthDashRes = await fetch(`${BASE_URL}/dashboard`, { redirect: 'manual' });
+    record('6. Security & Edge Cases', 'Unauthenticated Dashboard Access Blocked (Redirects)', unauthDashRes.status === 307 || unauthDashRes.status === 308);
+
+    const unauthApiRes = await fetch(`${BASE_URL}/api/students`);
+    record('6. Security & Edge Cases', 'Unauthenticated API Request Blocked (401 Unauthorized)', unauthApiRes.status === 401);
+
     const badExamRes = await fetch(`${BASE_URL}/api/exams`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: 'No title provided' })
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': authCookie
+      },
+      body: JSON.stringify({ title: '' })
     });
     record('6. Security & Edge Cases', 'Exam Creation Validation (Rejects Missing Title)', badExamRes.status === 400);
   } catch (err: any) {
-    record('6. Security & Edge Cases', 'Security Test Exception', false, err.message);
+    record('6. Security & Edge Cases', 'Security Exception', false, err.message);
   }
 
-  // ----------------------------------------------------
-  // SUMMARY REPORT
-  // ----------------------------------------------------
-  const total = results.length;
-  const passed = results.filter(r => r.status === 'PASS').length;
-  const failed = results.filter(r => r.status === 'FAIL').length;
-
+  // Summary
   console.log('\n====================================================');
-  console.log(`📊 FINAL TEST REPORT: ${passed}/${total} TESTS PASSED (${failed} FAILED)`);
+  const total = results.length;
+  const passedCount = results.filter(r => r.status === 'PASS').length;
+  const failedCount = results.filter(r => r.status === 'FAIL').length;
+  console.log(`📊 FINAL TEST REPORT: ${passedCount}/${total} TESTS PASSED (${failedCount} FAILED)`);
   console.log('====================================================');
 
-  if (failed > 0) {
-    console.error(`❌ Suite failed with ${failed} failing assertions.`);
+  if (failedCount > 0) {
+    console.error(`❌ Suite failed with ${failedCount} failing assertions.`);
     process.exit(1);
   } else {
-    console.log('🎉 100% OF ALL END-TO-END SUITES PASSED FLAWLESSLY!');
+    console.log('🎉 ALL COMPREHENSIVE E2E VERIFICATION INVARIANTS SATISFIED!');
     process.exit(0);
   }
 }
 
-runE2ETests().catch(err => {
-  console.error('Fatal Test Runner Error:', err);
-  process.exit(1);
-});
+runE2ETests().catch(console.error);

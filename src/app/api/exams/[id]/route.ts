@@ -1,14 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthenticatedTeacher } from '@/lib/auth';
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const { id } = await params;
-    const exam = await prisma.exam.findUnique({
-      where: { id },
+    const exam = await prisma.exam.findFirst({
+      where: { id, teacherId: teacher.id },
       include: {
         questions: {
           orderBy: { orderIndex: 'asc' },
@@ -36,13 +42,18 @@ export async function GET(
 }
 
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const { id } = await params;
-    await prisma.exam.delete({
-      where: { id },
+    await prisma.exam.deleteMany({
+      where: { id, teacherId: teacher.id },
     });
 
     return NextResponse.json({ success: true, message: 'تم حذف الامتحان بنجاح' });

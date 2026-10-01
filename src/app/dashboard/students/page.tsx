@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import { Users, Plus, Phone, Award, BookOpen, Search, X, MessageCircle } from 'lucide-react';
+import { Users, Plus, Phone, Search, X, MessageCircle, BookOpen, AlertCircle } from 'lucide-react';
 
 export default function StudentsDirectoryPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -14,23 +13,28 @@ export default function StudentsDirectoryPage() {
 
   // Add student form
   const [name, setName] = useState('');
-  const [gradeLevel, setGradeLevel] = useState('الصف الرابع الابتدائي');
-  const [parentName, setParentName] = useState('');
+  const [grade, setGrade] = useState('الصف الرابع الابتدائي');
   const [parentPhone, setParentPhone] = useState('');
-  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const loadStudents = async () => {
     try {
       setLoading(true);
+      setErrorMsg(null);
       const res = await fetch('/api/students');
       const data = await res.json();
-      if (data.success) {
-        setStudents(data.data);
+      if (res.ok && data.success) {
+        setStudents(data.students || data.data || []);
+      } else {
+        setErrorMsg(data.error || 'فشل تحميل بيانات الطلاب');
+        setStudents([]);
       }
-      setLoading(false);
     } catch (e) {
       console.error(e);
+      setErrorMsg('حدث خطأ في الاتصال بالخادم');
+      setStudents([]);
+    } finally {
       setLoading(false);
     }
   };
@@ -50,37 +54,33 @@ export default function StudentsDirectoryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          gradeLevel,
-          parentName: parentName.trim() || undefined,
+          grade,
           parentPhone: parentPhone.trim() || undefined,
-          notes: notes.trim() || undefined,
         }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setShowAddModal(false);
         setName('');
-        setParentName('');
         setParentPhone('');
-        setNotes('');
         loadStudents();
       } else {
         alert(data.error || 'تعذر إضافة الطالب');
       }
-      setSaving(false);
     } catch (err) {
       console.error(err);
-      alert('حدث خطأ');
+      alert('حدث خطأ في الاتصال');
+    } finally {
       setSaving(false);
     }
   };
 
-  const filteredStudents = students.filter(
+  const filteredStudents = (students || []).filter(
     (s) =>
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.gradeLevel && s.gradeLevel.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.parentPhone && s.parentPhone.includes(searchTerm))
+      s?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s?.grade && s.grade.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s?.parentPhone && s.parentPhone.includes(searchTerm))
   );
 
   return (
@@ -96,19 +96,27 @@ export default function StudentsDirectoryPage() {
               سجل الطلاب وأولياء الأمور
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
-              إدارة بيانات الطلاب، متابعة الإنجاز، والتواصل السريع عبر واتساب
+              إدارة بيانات الطلاب، متابعة سجل الاختبارات، والتواصل الفوري عبر واتساب
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all active:scale-98"
+            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all active:scale-98 cursor-pointer"
           >
             <Plus className="w-5 h-5" />
             <span>إضافة طالب جديد</span>
           </button>
         </div>
+
+        {/* Error Alert */}
+        {errorMsg && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-600" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
         {/* Search & Filter bar */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
@@ -118,7 +126,7 @@ export default function StudentsDirectoryPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="البحث بالاسم أو المرحلة أو رقم الهاتف..."
-            className="w-full text-sm outline-none bg-transparent"
+            className="w-full text-sm outline-none bg-transparent font-medium"
           />
         </div>
 
@@ -134,6 +142,7 @@ export default function StudentsDirectoryPage() {
           <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-slate-200 space-y-4 max-w-lg mx-auto">
             <Users className="w-12 h-12 text-slate-400 mx-auto" />
             <h3 className="text-lg font-bold text-slate-800">لا يوجد طلاب مطابقين للبحث</h3>
+            <p className="text-xs text-slate-500">أضف طالباً جديداً لبدء تعيين الاختبارات وإرسال الروابط</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -144,10 +153,10 @@ export default function StudentsDirectoryPage() {
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
-                      {s.gradeLevel || 'عام'}
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100">
+                      {s.grade || 'الصف الدراسي'}
                     </span>
-                    <span className="text-xs text-slate-400 font-mono">
+                    <span className="text-xs text-slate-500 font-medium">
                       {s.examLinks?.length || 0} اختبارات
                     </span>
                   </div>
@@ -156,17 +165,15 @@ export default function StudentsDirectoryPage() {
 
                   <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400">ولي الأمر:</span>
-                      <span className="font-bold text-slate-800">{s.parentName || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">رقم الهاتف:</span>
-                      <span className="font-mono font-bold text-slate-800">{s.parentPhone || '—'}</span>
+                      <span className="text-slate-400">رقم ولي الأمر:</span>
+                      <span className="font-mono font-bold text-slate-800" dir="ltr">
+                        {s.parentPhone || '—'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {s.parentPhone && (
+                {s.parentPhone ? (
                   <a
                     href={`https://wa.me/${s.parentPhone.replace(/[^0-9]/g, '')}`}
                     target="_blank"
@@ -174,8 +181,12 @@ export default function StudentsDirectoryPage() {
                     className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-emerald-200"
                   >
                     <MessageCircle className="w-4 h-4 text-emerald-600" />
-                    <span>مراسلة عبر واتساب</span>
+                    <span>مراسلة ولي الأمر عبر واتساب</span>
                   </a>
+                ) : (
+                  <div className="text-center py-2 text-xs text-slate-400">
+                    لا يوجد رقم هاتف مسجل
+                  </div>
                 )}
               </div>
             ))}
@@ -192,7 +203,7 @@ export default function StudentsDirectoryPage() {
               <h3 className="text-lg font-bold text-slate-900 font-serif-arabic">إضافة طالب جديد</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"
+                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -207,73 +218,50 @@ export default function StudentsDirectoryPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="مثال: يوسف أحمد عبد الرحمن"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">المرحلة الدراسية</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">المرحلة الدراسية *</label>
                 <select
-                  value={gradeLevel}
-                  onChange={(e) => setGradeLevel(e.target.value)}
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none bg-white font-semibold"
                 >
-                  <option>الصف الأول الابتدائي</option>
-                  <option>الصف الثاني الابتدائي</option>
-                  <option>الصف الثالث الابتدائي</option>
-                  <option>الصف الرابع الابتدائي</option>
-                  <option>الصف الخامس الابتدائي</option>
-                  <option>الصف السادس الابتدائي</option>
+                  <option value="الصف الرابع الابتدائي">الصف الرابع الابتدائي</option>
+                  <option value="الصف الخامس الابتدائي">الصف الخامس الابتدائي</option>
+                  <option value="الصف السادس الابتدائي">الصف السادس الابتدائي</option>
+                  <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
+                  <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
+                  <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم ولي الأمر</label>
-                  <input
-                    type="text"
-                    value={parentName}
-                    onChange={(e) => setParentName(e.target.value)}
-                    placeholder="أ/ أحمد"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رقم واتساب ولي الأمر</label>
-                  <input
-                    type="text"
-                    value={parentPhone}
-                    onChange={(e) => setParentPhone(e.target.value)}
-                    placeholder="2010xxxxxxxx"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none font-mono"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">ملاحظات تعليمية</label>
-                <textarea
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="ملاحظات حول مستوى الطالب أو نقاط القوة والضعف..."
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none"
+                <label className="block text-xs font-bold text-slate-700 mb-1">رقم واتساب ولي الأمر (اختياري)</label>
+                <input
+                  type="tel"
+                  value={parentPhone}
+                  onChange={(e) => setParentPhone(e.target.value)}
+                  placeholder="مثال: +201012345678"
+                  dir="ltr"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-left"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs"
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md"
+                  className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm disabled:opacity-50 cursor-pointer"
                 >
                   {saving ? 'جاري الحفظ...' : 'حفظ الطالب'}
                 </button>

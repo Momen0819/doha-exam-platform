@@ -1,21 +1,33 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { LinkStatus } from '@prisma/client';
+import { getAuthenticatedTeacher } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const [totalExams, totalStudents, totalLinks, completedAttempts, recentAttempts] = await Promise.all([
-      prisma.exam.count(),
-      prisma.student.count(),
-      prisma.examLink.count(),
+      prisma.exam.count({ where: { teacherId: teacher.id } }),
+      prisma.student.count({ where: { teacherId: teacher.id } }),
+      prisma.examLink.count({ where: { exam: { teacherId: teacher.id } } }),
       prisma.studentAttempt.count({
         where: {
           examLink: {
+            exam: { teacherId: teacher.id },
             status: { in: [LinkStatus.SUBMITTED, LinkStatus.GRADED] },
           },
         },
       }),
       prisma.studentAttempt.findMany({
+        where: {
+          examLink: {
+            exam: { teacherId: teacher.id },
+          },
+        },
         take: 8,
         orderBy: { createdAt: 'desc' },
         include: {
@@ -32,7 +44,10 @@ export async function GET() {
     // Calculate average score across graded attempts
     const gradedAttempts = await prisma.studentAttempt.findMany({
       where: {
-        examLink: { status: LinkStatus.GRADED },
+        examLink: {
+          exam: { teacherId: teacher.id },
+          status: LinkStatus.GRADED,
+        },
         totalScore: { not: null },
       },
       include: {
@@ -51,6 +66,13 @@ export async function GET() {
       avgPercentage = Math.round(sumPercentages / gradedAttempts.length);
     }
 
+    const pendingGrading = await prisma.examLink.count({
+      where: {
+        exam: { teacherId: teacher.id },
+        status: LinkStatus.SUBMITTED,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       stats: {
@@ -59,7 +81,7 @@ export async function GET() {
         totalLinks,
         completedAttempts,
         avgPercentage,
-        pendingGrading: await prisma.examLink.count({ where: { status: LinkStatus.SUBMITTED } }),
+        pendingGrading,
       },
       recentAttempts,
     });

@@ -1,15 +1,24 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { LinkStatus } from '@prisma/client';
+import { getAuthenticatedTeacher } from '@/lib/auth';
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ attemptId: string }> }
 ) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const { attemptId } = await params;
-    const attempt = await prisma.studentAttempt.findUnique({
-      where: { id: attemptId },
+    const attempt = await prisma.studentAttempt.findFirst({
+      where: {
+        id: attemptId,
+        examLink: { exam: { teacherId: teacher.id } },
+      },
       include: {
         examLink: {
           include: {
@@ -39,17 +48,24 @@ export async function GET(
 }
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ attemptId: string }> }
 ) {
   try {
+    const teacher = await getAuthenticatedTeacher(req);
+    if (!teacher) {
+      return NextResponse.json({ success: false, error: 'غير مصرح لك، يرجى تسجيل الدخول' }, { status: 401 });
+    }
+
     const { attemptId } = await params;
     const body = await req.json();
     const { questionScores, teacherFeedback, publishFeedback } = body;
-    // questionScores: { [questionId: string]: { score: number, note?: string } }
 
-    const attempt = await prisma.studentAttempt.findUnique({
-      where: { id: attemptId },
+    const attempt = await prisma.studentAttempt.findFirst({
+      where: {
+        id: attemptId,
+        examLink: { exam: { teacherId: teacher.id } },
+      },
       include: {
         examLink: true,
         answers: true,
